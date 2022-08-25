@@ -1,6 +1,7 @@
 /*
  * File:   main.c
- * Author: Gunnar T. 
+ * Author: Gunnar T.
+ * Editors: Ben, Rob, nold
  *
  * Created on October 9, 2019, 5:44 PM
  */
@@ -13,39 +14,50 @@
 #include "time.h"
 #include "LM49450.h"
 
+//Change this to enable/disable volume pot support
+//#define USE_ADC
+
+#ifdef USE_ADC
+#include "ADC.h"
+#endif
+
 void PIC_SETUP(){
-    
     //IO setup
     TRISA = 0xFF;
     TRISC = 0xFF;
-    ANSELA = 0;
-    ANSELC = 0;
     WPUA = 0b00110000;      //WPU on RA5 and RA4, volume plus and minus
     WPUC = 0b00011000;      //WPU on RC4 and RC3, jumpers
-    
+
+#ifdef USE_ADC
+    ANSELA = 0b00100000; //Sets RA5 as an analog input for wiper pin
+    ADCON1 = 0b01100000; //Left justified, ADCLK is FOSC/64, VREF is now VDD
+    ADCON0 = (21 << 2) | 0b1;
+#else
+    ANSELA = 0;
+    ANSELC = 0;
+#endif
+
     //TIMER1 setup
     T1CONbits.CKPS = 0b00;  //1:1 prescale
     T1CONbits.nSYNC = 0;
     T1CONbits.RD16 = 1;     //16-bit read
     T1GCONbits.GE = 0;      //Gate OFF
     T1CLK = 0b00000100;     //CLK is LFINTOSC
-    TMR1 = TMR1_RST;  
-    PIE4bits.TMR1IE = 1;    //enable tmr1 interrupt     
+    TMR1 = TMR1_RST;
+    PIE4bits.TMR1IE = 1;    //enable tmr1 interrupt
     T1CONbits.ON = 1;
-    
+
     INTCONbits.GIE = 1;     //enable active interrupts
     INTCONbits.PEIE = 1;    //enable peripheral interrupts
 }
 
 void interrupt ISR(){
-
     if(TMR1IF) {
         TMR1IF = 0;
         TMR1 = TMR1_RST;
         timer_counter++;
     }
-    
-} 
+}
 
 uint8_t mute_config = 0;    //sets mute to 0 and saves default reg0 config
 uint8_t mute_state = 0;
@@ -73,9 +85,8 @@ uint8_t vol_minus_state = 0;
 */
 
 void main(void) {
-    
     PIC_SETUP();
- 
+
     //Initialize I2C Master
     PPS_unlock();
     SSP1DATPPS = 0x11;  //SDA INPUT
@@ -83,11 +94,11 @@ void main(void) {
     SSP1CLKPPS = 0x10;  //SDA INPUT
     RC0PPS = 0x15;      //SCL OUTPUT
     PPS_lock();
-    I2C_Master_Init(100000);      
-    
+    I2C_Master_Init(100000);
+
     //delay before beginning I2C to make sure voltage is stable
     __delay_ms(50);
-    
+
     //check jumpers and initialize audio mode
     if(dat0 && dat1) {
         mute_config = LM49450_Wii_init();
@@ -101,13 +112,12 @@ void main(void) {
     else if(!dat0 && dat1) {
         mute_config = LM49450_DC_init();
     }
-    
+
     //set volume over i2c
     LM49450_write(0x08, volume_sp); //speaker volume
     LM49450_write(0x07, volume_hp); //headphone volume
-    
+
     while(1) {
-        
         //debouncing headphone sense
         if(HPS) {
             if(HPS_state == 0) {
@@ -128,12 +138,13 @@ void main(void) {
             if(HPS_state == 2) {
                 if(volume_hp == 0 && mute_state == 0) {
                     //if hp volume is 0, then amp has been muted. it should be unmuted if it is not in mute state
-                    LM49450_write(0x00, mute_config);   //un mute amp  
+                    LM49450_write(0x00, mute_config);   //un mute amp
                 }
             }
             HPS_state = 0;
         }
-        
+
+#ifndef USE_ADC
         if(!vol_plus) {
             switch(vol_plus_state) {
                 case 0:
@@ -150,8 +161,8 @@ void main(void) {
                              if((volume_hp < 31) && mute_state == 0) volume_hp++;
                         }
                         else if((volume_sp < 31) && mute_state == 0) volume_sp++;
-                    }                         
-                break; 
+                    }
+                break;
                 case 2:
                     //button is pressed, every X time, increment volume
                     if(timer_diff(vol_plus_time_hold) >= 20) {
@@ -169,7 +180,7 @@ void main(void) {
         else {
             vol_plus_state = 0;
         }
-              
+
         if(!vol_minus) {
             switch(vol_minus_state) {
                 case 0:
@@ -184,8 +195,8 @@ void main(void) {
                              if((volume_hp > 0) && mute_state == 0) volume_hp--;
                         }
                         else if((volume_sp > 0) && mute_state == 0) volume_sp--;
-                    }                         
-                break; 
+                    }
+                break;
                 case 2:
                     if(timer_diff(vol_minus_time_hold) >= 20) {
                         vol_minus_time_hold = get_time();
@@ -201,8 +212,8 @@ void main(void) {
         }
         else {
             vol_minus_state = 0;
-        }        
-        
+        }
+
         //if both buttons held down, then mute amp
         if((vol_plus_state == 2) && (vol_minus_state == 2)) {
             switch(mute_state) {
@@ -213,11 +224,11 @@ void main(void) {
                 break;
                 case 1:
                     //amp is now muted, wait for both buttons to be released
-                break;    
+                break;
                 case 2:
                     LM49450_write(0x00, mute_config);   //un mute amp
                     mute_state = 3;
-                break;    
+                break;
                 case 3:
                     //wait for both buttons to be released
                 break;
@@ -233,9 +244,16 @@ void main(void) {
                 mute_state = 0;
             }
         }
-        
+#else
+      //Sets volume of speakers by reading pot value
+      volume_sp = get_adc_volume(volume_sp);
+
+      //Sets volume of headphones
+      volume_hp = volume_sp/2;
+#endif
+
         //setting the volume to the amp
-        if((volume_sp != volume_sp_prev) && mute_state == 0) {   
+        if((volume_sp != volume_sp_prev) && mute_state == 0) {
             LM49450_write(0x08, volume_sp); //speaker volume
             if(volume_sp == 0) {
                 LM49450_write(0x00, (mute_config | 0b00000100));    //mute amp
@@ -244,8 +262,8 @@ void main(void) {
                 LM49450_write(0x00, mute_config);   //un mute amp
             }
         }
-        
-        if((volume_hp != volume_hp_prev) && mute_state == 0) {     
+
+        if((volume_hp != volume_hp_prev) && mute_state == 0) {
             LM49450_write(0x07, volume_hp); //headphone volume
             if(volume_hp == 0) {
                 LM49450_write(0x00, (mute_config | 0b00000100));    //mute amp
@@ -253,8 +271,8 @@ void main(void) {
             else {
                 LM49450_write(0x00, mute_config);   //un mute amp
             }
-        }        
-        
+        }
+
         volume_sp_prev = volume_sp;
         volume_hp_prev = volume_hp;
     }
