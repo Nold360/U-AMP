@@ -24,7 +24,7 @@ CLEAN_SUBPROJECTS=${CLEAN_SUBPROJECTS_${SUBPROJECTS}}
 
 
 # Project Name
-PROJECTNAME=UAMP firmware.X
+PROJECTNAME=firmware
 
 # Active Configuration
 DEFAULTCONF=default
