@@ -26,6 +26,7 @@ int get_adc_volume(int current_vol) {
     // an_in ranges from 0 to 255
     // current_vol and volume_out range from 0 to 31
     uint8_t an_in = read_ADC();
+    uint8_t out_vol = (an_in + 4)/8;
 
     // Without hysteresis, we could just divide the an_in value by 8 and
     // round to the nearest integer. Or, equivalently, finding volume_out such
@@ -39,7 +40,6 @@ int get_adc_volume(int current_vol) {
     }
 
     // Otherwise, we'll divide by 8 and round to the nearest int.
-    uint8_t out_vol = (an_in + 4)/8;
     if(out_vol > 31) {
         out_vol = 31;
     }

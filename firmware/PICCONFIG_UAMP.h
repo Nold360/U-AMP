@@ -53,6 +53,7 @@
 //Pin definitions
 #define vol_plus    RA5
 #define vol_minus   RA4
+#define adc_mode    RC5
 #define dat0        RC4
 #define dat1        RC3
 #define HPS         RC2

@@ -13,29 +13,27 @@
 #include "I2C.h"
 #include "time.h"
 #include "LM49450.h"
-
-//Change this to enable/disable volume pot support
-//#define USE_ADC
-
-#ifdef USE_ADC
 #include "ADC.h"
-#endif
+
+uint8_t vol_pot_mode = 0;
 
 void PIC_SETUP(){
     //IO setup
     TRISA = 0xFF;
     TRISC = 0xFF;
-    WPUA = 0b00110000;      //WPU on RA5 and RA4, volume plus and minus
-    WPUC = 0b00011000;      //WPU on RC4 and RC3, jumpers
-
-#ifdef USE_ADC
-    ANSELA = 0b00100000; //Sets RA5 as an analog input for wiper pin
-    ADCON1 = 0b01100000; //Left justified, ADCLK is FOSC/64, VREF is now VDD
-    ADCON0 = (21 << 2) | 0b1;
-#else
-    ANSELA = 0;
     ANSELC = 0;
-#endif
+    WPUC = 0b00111000;      //WPU on RC5, RC4 and RC3 (jumpers)
+
+    // Use pot or buttons for volume control? [Jumper 3]
+    if(!adc_mode) {
+        vol_pot_mode = 1;
+        ANSELA = 0b00100000; //Sets RA5 as an analog input for wiper pin
+        ADCON1 = 0b01100000; //Left justified, ADCLK is FOSC/64, VREF is now VDD
+        ADCON0 = 0b00010101; //Enable ADC on RA5
+    } else {
+        ANSELA = 0;
+        WPUA = 0b00110000;      //WPU on RA5 and RA4, volume plus and minus
+    }
 
     //TIMER1 setup
     T1CONbits.CKPS = 0b00;  //1:1 prescale
@@ -78,6 +76,7 @@ uint32_t vol_minus_time_hold = 0;
 
 uint8_t vol_plus_state = 0;     //state of button presses
 uint8_t vol_minus_state = 0;
+
 /*
  state 0: button is not pressed
  state 1: button is being debounced
@@ -144,113 +143,115 @@ void main(void) {
             HPS_state = 0;
         }
 
-#ifndef USE_ADC
-        if(!vol_plus) {
-            switch(vol_plus_state) {
-                case 0:
-                    //button has been pressed first time
-                    vol_plus_time_start = get_time();
-                    vol_plus_state = 1;
-                break;
-                case 1:
-                    //wait to see if button is debounced
-                    if(timer_diff(vol_plus_time_start) >= 4) {
-                        vol_plus_time_hold = get_time();
-                        vol_plus_state = 2;
-                        if(HPS_state == 2) {
-                             if((volume_hp < 31) && mute_state == 0) volume_hp++;
+        // Use buttons for volume control?
+        if(!vol_pot_mode) {
+            if(!vol_plus) {
+                switch(vol_plus_state) {
+                    case 0:
+                        //button has been pressed first time
+                        vol_plus_time_start = get_time();
+                        vol_plus_state = 1;
+                    break;
+                    case 1:
+                        //wait to see if button is debounced
+                        if(timer_diff(vol_plus_time_start) >= 4) {
+                            vol_plus_time_hold = get_time();
+                            vol_plus_state = 2;
+                            if(HPS_state == 2) {
+                                 if((volume_hp < 31) && mute_state == 0) volume_hp++;
+                            }
+                            else if((volume_sp < 31) && mute_state == 0) volume_sp++;
                         }
-                        else if((volume_sp < 31) && mute_state == 0) volume_sp++;
-                    }
-                break;
-                case 2:
-                    //button is pressed, every X time, increment volume
-                    if(timer_diff(vol_plus_time_hold) >= 20) {
-                        vol_plus_time_hold = get_time();
-                        if(HPS_state == 2) {
-                             if((volume_hp < 31) && mute_state == 0) volume_hp++;
+                    break;
+                    case 2:
+                        //button is pressed, every X time, increment volume
+                        if(timer_diff(vol_plus_time_hold) >= 20) {
+                            vol_plus_time_hold = get_time();
+                            if(HPS_state == 2) {
+                                 if((volume_hp < 31) && mute_state == 0) volume_hp++;
+                            }
+                            else if((volume_sp < 31) && mute_state == 0) volume_sp++;
                         }
-                        else if((volume_sp < 31) && mute_state == 0) volume_sp++;
-                    }
-                break;
-                default:
-                    vol_plus_state = 0;
+                    break;
+                    default:
+                        vol_plus_state = 0;
+                }
             }
-        }
-        else {
-            vol_plus_state = 0;
-        }
-
-        if(!vol_minus) {
-            switch(vol_minus_state) {
-                case 0:
-                    vol_minus_time_start = get_time();
-                    vol_minus_state = 1;
-                break;
-                case 1:
-                    if(timer_diff(vol_minus_time_start) >= 4) {
-                        vol_minus_time_hold = get_time();
-                        vol_minus_state = 2;
-                        if(HPS_state == 2) {
-                             if((volume_hp > 0) && mute_state == 0) volume_hp--;
-                        }
-                        else if((volume_sp > 0) && mute_state == 0) volume_sp--;
-                    }
-                break;
-                case 2:
-                    if(timer_diff(vol_minus_time_hold) >= 20) {
-                        vol_minus_time_hold = get_time();
-                        if(HPS_state == 2) {
-                             if((volume_hp > 0) && mute_state == 0) volume_hp--;
-                        }
-                        else if((volume_sp > 0) && mute_state == 0) volume_sp--;
-                    }
-                break;
-                default:
-                    vol_minus_state = 0;
+            else {
+                vol_plus_state = 0;
             }
-        }
-        else {
-            vol_minus_state = 0;
-        }
 
-        //if both buttons held down, then mute amp
-        if((vol_plus_state == 2) && (vol_minus_state == 2)) {
-            switch(mute_state) {
-                case 0:
-                    //both buttons are held down first time
-                    LM49450_write(0x00, (mute_config | 0b100));    //mute amp
-                    mute_state = 1;
-                break;
-                case 1:
-                    //amp is now muted, wait for both buttons to be released
-                break;
-                case 2:
-                    LM49450_write(0x00, mute_config);   //un mute amp
-                    mute_state = 3;
-                break;
-                case 3:
-                    //wait for both buttons to be released
-                break;
-                default:
+            if(!vol_minus) {
+                switch(vol_minus_state) {
+                    case 0:
+                        vol_minus_time_start = get_time();
+                        vol_minus_state = 1;
+                    break;
+                    case 1:
+                        if(timer_diff(vol_minus_time_start) >= 4) {
+                            vol_minus_time_hold = get_time();
+                            vol_minus_state = 2;
+                            if(HPS_state == 2) {
+                                 if((volume_hp > 0) && mute_state == 0) volume_hp--;
+                            }
+                            else if((volume_sp > 0) && mute_state == 0) volume_sp--;
+                        }
+                    break;
+                    case 2:
+                        if(timer_diff(vol_minus_time_hold) >= 20) {
+                            vol_minus_time_hold = get_time();
+                            if(HPS_state == 2) {
+                                 if((volume_hp > 0) && mute_state == 0) volume_hp--;
+                            }
+                            else if((volume_sp > 0) && mute_state == 0) volume_sp--;
+                        }
+                    break;
+                    default:
+                        vol_minus_state = 0;
+                }
+            }
+            else {
+                vol_minus_state = 0;
+            }
+
+            //if both buttons held down, then mute amp
+            if((vol_plus_state == 2) && (vol_minus_state == 2)) {
+                switch(mute_state) {
+                    case 0:
+                        //both buttons are held down first time
+                        LM49450_write(0x00, (mute_config | 0b100));    //mute amp
+                        mute_state = 1;
+                    break;
+                    case 1:
+                        //amp is now muted, wait for both buttons to be released
+                    break;
+                    case 2:
+                        LM49450_write(0x00, mute_config);   //un mute amp
+                        mute_state = 3;
+                    break;
+                    case 3:
+                        //wait for both buttons to be released
+                    break;
+                    default:
+                        mute_state = 0;
+                }
+            }
+            else {
+                if(mute_state == 1) {
+                    mute_state = 2;
+                }
+                if(mute_state == 3) {
                     mute_state = 0;
+                }
             }
-        }
-        else {
-            if(mute_state == 1) {
-                mute_state = 2;
-            }
-            if(mute_state == 3) {
-                mute_state = 0;
-            }
-        }
-#else
-      //Sets volume of speakers by reading pot value
-      volume_sp = get_adc_volume(volume_sp);
+        // Use ADC for Volume Pot:
+        } else {
+          //Sets volume of speakers by reading pot value
+          volume_sp = get_adc_volume(volume_sp);
 
-      //Sets volume of headphones
-      volume_hp = volume_sp/2;
-#endif
+          //Sets volume of headphones
+          volume_hp = volume_sp/2;
+        }
 
         //setting the volume to the amp
         if((volume_sp != volume_sp_prev) && mute_state == 0) {
