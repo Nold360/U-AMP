@@ -14,6 +14,7 @@ void LM49450_write(unsigned char reg, char data);
 uint8_t LM49450_DC_init();
 uint8_t LM49450_Wii_init();
 uint8_t LM49450_PS2_init();
+uint8_t LM49450_N64_init();
 uint8_t LM49450_analog_init();
 
 #endif

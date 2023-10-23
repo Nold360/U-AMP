@@ -52,6 +52,17 @@ uint8_t LM49450_PS2_init() {
     return reg0_PS2;
 }
 
+uint8_t LM49450_N64_init() {
+    uint8_t reg0_N64 = 0b00101001;  //128 oversampling
+    LM49450_write(0x00, reg0_N64);
+    LM49450_write(0x01, 0b00000011);    //divide by 2. MCLK = 512fs
+    LM49450_write(0x02, 0x4B);  
+    LM49450_write(0x03, 0b00000010);  
+    LM49450_write(0x04, 0x00);  
+    
+    return reg0_N64;
+}
+
 uint8_t LM49450_analog_init() {
     uint8_t reg0_analog = 0b00101011;
     LM49450_write(0x00, reg0_analog);     

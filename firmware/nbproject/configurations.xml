@@ -10,6 +10,8 @@
       <itemPath>time.h</itemPath>
       <itemPath>LM49450.h</itemPath>
       <itemPath>ADC.h</itemPath>
+      <itemPath>CS2300CP.c</itemPath>
+      <itemPath>CS2300CP.h</itemPath>
     </logicalFolder>
     <logicalFolder name="LinkerScript"
                    displayName="Linker Files"
@@ -39,7 +41,7 @@
         <targetDevice>PIC16F15324</targetDevice>
         <targetHeader></targetHeader>
         <targetPluginBoard></targetPluginBoard>
-        <platformTool>PICkit3PlatformTool</platformTool>
+        <platformTool>noID</platformTool>
         <languageToolchain>XC8</languageToolchain>
         <languageToolchainVersion>2.40</languageToolchainVersion>
         <platform>2</platform>
@@ -104,7 +106,7 @@
         <property key="undefine-macros" value=""/>
         <property key="use-cci" value="false"/>
         <property key="use-iar" value="false"/>
-        <property key="verbose" value="false"/>
+        <property key="verbose" value="true"/>
         <property key="warning-level" value="-3"/>
         <property key="what-to-do" value="ignore"/>
       </HI-TECH-COMP>

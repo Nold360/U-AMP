@@ -15,6 +15,12 @@
 #include "LM49450.h"
 #include "ADC.h"
 
+#define N64
+
+#ifdef N64
+#include "CS2300CP.h"
+#endif
+
 uint8_t vol_pot_mode = 0;
 
 void PIC_SETUP(){
@@ -98,6 +104,7 @@ void main(void) {
     //delay before beginning I2C to make sure voltage is stable
     __delay_ms(50);
 
+    #ifndef N64
     //check jumpers and initialize audio mode
     if(dat0 && dat1) {
         mute_config = LM49450_Wii_init();
@@ -111,7 +118,11 @@ void main(void) {
     else if(!dat0 && dat1) {
         mute_config = LM49450_DC_init();
     }
-
+    #else
+    CS2300CP_init();
+    mute_config = LM49450_N64_init();
+    #endif
+    
     //set volume over i2c
     LM49450_write(0x08, volume_sp); //speaker volume
     LM49450_write(0x07, volume_hp); //headphone volume
